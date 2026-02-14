@@ -1,1 +1,705 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Suica → freee 変換ツール</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f5f0; --card: #ffffff; --primary: #1a6b3c;
+    --primary-light: #e8f5ed; --primary-dark: #0d4a28;
+    --accent: #d4a843; --text: #2c2c2c; --text-light: #6b6b6b;
+    --border: #e0ddd5; --danger: #c44d3f; --danger-light: #fdf0ee;
+    --success: #1a6b3c; --success-light: #e8f5ed;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --radius: 12px; --muted: #9a9890;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Noto Sans JP', -apple-system, sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100vh; -webkit-font-smoothing: antialiased;
+  }
+  .app { max-width: 640px; margin: 0 auto; padding: 0 16px 100px; }
 
+  .header {
+    padding: 24px 0 16px; text-align: center;
+    border-bottom: 1px solid var(--border); margin-bottom: 20px;
+  }
+  .header-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 48px; height: 48px; background: var(--primary);
+    border-radius: 14px; margin-bottom: 10px;
+  }
+  .header-icon svg { width: 26px; height: 26px; fill: white; }
+  .header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+  .header p { font-size: 13px; color: var(--text-light); margin-top: 4px; line-height: 1.5; }
+
+  .step {
+    background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 20px; margin-bottom: 14px;
+    border: 1px solid var(--border);
+  }
+  .step-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .step-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; background: var(--primary);
+    color: white; border-radius: 50%; font-size: 13px; font-weight: 600; flex-shrink: 0;
+  }
+  .step-title { font-size: 15px; font-weight: 600; }
+  .step-desc { font-size: 13px; color: var(--text-light); line-height: 1.6; margin-bottom: 12px; }
+
+  .year-row { display: flex; align-items: center; gap: 10px; }
+  .year-label { font-size: 14px; font-weight: 500; white-space: nowrap; }
+  select, .year-select {
+    padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 15px; font-family: inherit; background: var(--bg); color: var(--text);
+    -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6b6b' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+  }
+  .year-select { flex: 1; }
+
+  .paste-area {
+    width: 100%; min-height: 160px; padding: 14px;
+    border: 2px dashed var(--border); border-radius: 10px;
+    font-size: 13px; font-family: 'SF Mono', 'Menlo', monospace;
+    line-height: 1.6; resize: vertical; background: var(--bg);
+    color: var(--text); transition: border-color 0.2s;
+  }
+  .paste-area:focus { outline: none; border-color: var(--primary); background: white; }
+  .paste-area::placeholder { color: #aaa; font-family: 'Noto Sans JP', sans-serif; font-size: 13px; }
+
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; padding: 14px 20px; border: none; border-radius: 10px;
+    font-size: 15px; font-weight: 600; font-family: inherit;
+    cursor: pointer; transition: all 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:active { background: var(--primary-dark); transform: scale(0.98); }
+  .btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:active { background: #eae9e4; }
+  .btn-download { background: var(--accent); color: white; }
+  .btn-download:active { background: #b8912e; transform: scale(0.98); }
+  .btn-download-alt { background: var(--primary); color: white; }
+  .btn-download-alt:active { background: var(--primary-dark); transform: scale(0.98); }
+  .btn-icon { width: 18px; height: 18px; }
+
+  .filter-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 20px; font-size: 13px;
+    font-weight: 500; cursor: pointer; transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent; user-select: none;
+    border: 1.5px solid var(--border); background: var(--card); color: var(--text);
+  }
+  .chip.active { background: var(--primary-light); border-color: var(--primary); color: var(--primary-dark); }
+  .chip.active .chip-check { display: inline; }
+  .chip .chip-check { display: none; }
+  .chip.excluded { background: var(--danger-light); border-color: var(--danger); color: var(--danger); text-decoration: line-through; }
+  .chip .chip-count { font-size: 11px; opacity: 0.7; font-weight: 400; }
+  .chip:active { transform: scale(0.96); }
+  .filter-hint { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+  .filter-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .filter-btn {
+    padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text-light); font-size: 12px;
+    font-family: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .filter-btn:active { background: #e0ddd5; }
+
+  .preview-wrap {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    margin-top: 12px; border: 1px solid var(--border); border-radius: 8px;
+    max-height: 400px; overflow-y: auto;
+  }
+  .preview-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+  .preview-table th {
+    background: var(--primary-light); color: var(--primary-dark);
+    font-weight: 600; padding: 8px 12px; text-align: left;
+    position: sticky; top: 0; border-bottom: 2px solid var(--primary); z-index: 1;
+  }
+  .preview-table td { padding: 7px 12px; border-bottom: 1px solid var(--border); }
+  .preview-table tr:last-child td { border-bottom: none; }
+  .preview-table tr:nth-child(even) { background: #fafaf7; }
+  .preview-table tr.excluded-row { opacity: 0.3; text-decoration: line-through; }
+  .amount-out { color: var(--danger); font-weight: 500; }
+  .amount-in { color: var(--success); font-weight: 500; }
+
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .stat-card { padding: 12px; border-radius: 8px; text-align: center; }
+  .stat-card.out { background: var(--danger-light); border: 1px solid #e8c4bf; }
+  .stat-card.in { background: var(--success-light); border: 1px solid #b8d9c5; }
+  .stat-label { font-size: 11px; color: var(--text-light); margin-bottom: 3px; }
+  .stat-value { font-size: 16px; font-weight: 700; }
+  .stat-card.out .stat-value { color: var(--danger); }
+  .stat-card.in .stat-value { color: var(--success); }
+  .stat-count { font-size: 11px; color: var(--text-light); margin-top: 2px; }
+  .stats-excluded {
+    text-align: center; font-size: 12px; color: var(--muted);
+    margin-top: 8px; padding: 6px; background: var(--bg); border-radius: 6px;
+  }
+
+  .msg { padding: 12px 14px; border-radius: 8px; font-size: 13px; line-height: 1.5; margin-top: 12px; }
+  .msg-error { background: var(--danger-light); color: var(--danger); border: 1px solid #e8c4bf; }
+  .msg-success { background: var(--success-light); color: var(--primary-dark); border: 1px solid #b8d9c5; }
+
+  .info-box {
+    background: #faf8f1; border: 1px solid #e6dfc4; border-radius: 8px;
+    padding: 14px; font-size: 12px; line-height: 1.7; color: var(--text-light);
+  }
+  .info-box strong { color: var(--text); font-weight: 600; }
+
+  /* Account mapping section */
+  .mapping-grid {
+    display: grid; gap: 10px; margin-top: 12px;
+  }
+  .mapping-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; background: var(--bg); border-radius: 8px;
+    font-size: 13px;
+  }
+  .mapping-cat {
+    font-weight: 600; min-width: 80px; flex-shrink: 0;
+  }
+  .mapping-arrow { color: var(--muted); flex-shrink: 0; }
+  .mapping-select {
+    flex: 1; padding: 7px 10px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 13px; font-family: inherit;
+    background: var(--card); color: var(--text);
+    -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b6b6b' stroke-width='1.2' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center;
+  }
+
+  .download-grid { display: grid; gap: 10px; }
+  .dl-option {
+    padding: 14px; border: 1.5px solid var(--border); border-radius: 10px;
+    background: var(--card);
+  }
+  .dl-option-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .dl-option-desc { font-size: 12px; color: var(--text-light); margin-bottom: 10px; line-height: 1.5; }
+
+  .footer { text-align: center; padding: 24px 0; font-size: 11px; color: #aaa; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .fade-in { animation: fadeIn 0.3s ease-out; }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18; --card: #252523; --text: #e8e6e1;
+      --text-light: #9a9890; --border: #3a3935;
+      --primary-light: #1a3326; --danger-light: #3a2220;
+      --success-light: #1a3326; --muted: #777068;
+    }
+    .paste-area { background: #1e1e1c; }
+    .paste-area:focus { background: var(--card); }
+    .preview-table tr:nth-child(even) { background: #2a2a28; }
+    .info-box { background: #2a2820; border-color: #3a3525; }
+    select, .year-select { background-color: var(--bg); }
+    .stat-card.out { background: #3a2220; border-color: #5a3230; }
+    .stat-card.in { background: #1a3326; border-color: #2a5340; }
+    .chip { background: var(--card); }
+    .chip.active { background: #1a3326; border-color: var(--primary); color: #7fc49a; }
+    .chip.excluded { background: #3a2220; border-color: #8a4d40; color: #c47060; }
+    .mapping-row { background: #1e1e1c; }
+    .mapping-select { background: var(--card); }
+    .dl-option { background: var(--card); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="header-icon">
+      <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h2v2H6v-2zm0 4h8v2H6v-2zm10 0h2v2h-2v-2zm-6-4h8v2h-8v-2z"/></svg>
+    </div>
+    <h1>Suica → freee 変換ツール</h1>
+    <p>モバイルSuica利用履歴を<br>freee会計にインポートできる形式に変換</p>
+  </div>
+
+  <!-- Step 1 -->
+  <div class="step">
+    <div class="step-header">
+      <span class="step-num">1</span>
+      <span class="step-title">対象年を選択</span>
+    </div>
+    <div class="step-desc">Suica履歴は月日のみ表示のため、年を指定。年跨ぎは分けて変換してください。</div>
+    <div class="year-row">
+      <span class="year-label">対象年：</span>
+      <select id="yearSelect" class="year-select"></select>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="step">
+    <div class="step-header">
+      <span class="step-num">2</span>
+      <span class="step-title">履歴データを貼り付け</span>
+    </div>
+    <div class="step-desc">モバイルSuica会員メニュー →「SF(電子マネー)利用履歴」の表を全選択→コピーし、下に貼り付け。</div>
+    <textarea id="pasteArea" class="paste-area" placeholder="ここにSuicaの利用履歴を貼り付け&#10;&#10;例：&#10;01/15	物販	コンビニＡ		　	4,780	-220&#10;01/14	入	渋谷	出	新宿	4,500	-170&#10;01/13	ﾁｬｰｼﾞ	ﾋﾞｭ		　	5,000	3,000"></textarea>
+    <div style="margin-top: 12px; display: flex; gap: 10px;">
+      <button class="btn btn-primary" onclick="parseData()" style="flex:2">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        変換する
+      </button>
+      <button class="btn btn-secondary" onclick="clearAll()" style="flex:1">クリア</button>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="results" style="display:none">
+    <!-- Step 3: Filter -->
+    <div class="step fade-in">
+      <div class="step-header">
+        <span class="step-num">3</span>
+        <span class="step-title">種別フィルター</span>
+      </div>
+      <div class="step-desc">タップで除外/復活。取り消し線＝出力から除外。</div>
+      <div id="filterChips" class="filter-chips"></div>
+      <div class="filter-actions">
+        <button class="filter-btn" onclick="setAllFilters(true)">すべて含める</button>
+        <button class="filter-btn" onclick="setAllFilters(false)">すべて除外</button>
+        <button class="filter-btn" onclick="excludeDefaults()">交通費のみ</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Account mapping -->
+    <div class="step fade-in">
+      <div class="step-header">
+        <span class="step-num">4</span>
+        <span class="step-title">勘定科目の設定</span>
+      </div>
+      <div class="step-desc">種別ごとにfreeeの勘定科目を指定。エクセルインポート時に自動適用されます。</div>
+      <div id="mappingGrid" class="mapping-grid"></div>
+      <div style="margin-top:10px;">
+        <div class="mapping-row">
+          <span class="mapping-cat">決済口座</span>
+          <span class="mapping-arrow">→</span>
+          <select id="paymentAccount" class="mapping-select">
+            <option value="事業主借">事業主借</option>
+            <option value="現金">現金</option>
+            <option value="普通預金">普通預金</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5: Preview -->
+    <div class="step fade-in">
+      <div class="step-header">
+        <span class="step-num">5</span>
+        <span class="step-title">変換結果の確認</span>
+      </div>
+      <div id="stats" class="stats"></div>
+      <div id="statsExcluded" class="stats-excluded" style="display:none"></div>
+      <div class="preview-wrap">
+        <table class="preview-table">
+          <thead><tr><th>日付</th><th>種別</th><th>摘要</th><th>出金</th><th>入金</th></tr></thead>
+          <tbody id="previewBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Step 6: Download -->
+    <div class="step fade-in">
+      <div class="step-header">
+        <span class="step-num">6</span>
+        <span class="step-title">ダウンロード</span>
+      </div>
+      <div id="downloadInfo" style="font-size:13px; color:var(--text-light); margin-bottom:14px; text-align:center;"></div>
+      <div class="download-grid">
+        <div class="dl-option">
+          <div class="dl-option-title">エクセルインポート形式（推奨）</div>
+          <div class="dl-option-desc">勘定科目・税区分が自動設定済み。freeeの「取引データのインポート」からそのまま取り込めます。</div>
+          <button class="btn btn-download" onclick="downloadExcel()">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            .xlsx ダウンロード
+          </button>
+        </div>
+        <div class="dl-option">
+          <div class="dl-option-title">明細アップロード用CSV</div>
+          <div class="dl-option-desc">シンプルな日付・摘要・金額のCSV。freeeの「明細アップロード」→「自動で経理」で使います。</div>
+          <button class="btn btn-download-alt" onclick="downloadCSV()">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            .csv ダウンロード
+          </button>
+        </div>
+      </div>
+      <div class="info-box" style="margin-top: 14px;">
+        <strong>エクセルインポートの手順：</strong><br>
+        ① freee会計 → 取引 →「収入・支出形式」<br>
+        ② 右上「その他の機能」→「取引データのインポート」<br>
+        ③ ダウンロードした.xlsxファイルをアップロード<br>
+        ④ プレビュー確認 →「インポート開始」で完了
+      </div>
+    </div>
+  </div>
+
+  <div id="errorMsg" style="display:none"></div>
+  <div class="footer">Suica → freee 変換ツール v2.0<br>データはすべてブラウザ内で処理（外部送信なし）</div>
+</div>
+
+<script>
+let parsedRows = [];
+let categories = {};
+
+const CATEGORY_MAP = {
+  '物販': '物販', '物': '物販',
+  'ﾁｬｰｼﾞ': 'チャージ', 'チャージ': 'チャージ', 'ﾁﾔｰｼﾞ': 'チャージ',
+  'ﾋﾞｭ': 'チャージ', 'ビュー': 'チャージ',
+  '入': '乗車', '窓出': '乗車', '精算': '精算',
+  'ﾊﾞｽ': 'バス', 'バス': 'バス', 'ﾊﾞｽ等': 'バス',
+  '券購': '券購入', '入金': '入金', '現金': '現金チャージ', '繰': '繰越',
+};
+
+const DEFAULT_EXCLUDE = ['物販', 'チャージ', '入金', '現金チャージ', '繰越'];
+
+// Default account mapping per category
+const DEFAULT_ACCOUNTS = {
+  '乗車': '旅費交通費',
+  'バス': '旅費交通費',
+  '精算': '旅費交通費',
+  '券購入': '旅費交通費',
+  '物販': '消耗品費',
+  'チャージ': '事業主借',
+  '入金': '事業主借',
+  '現金チャージ': '事業主借',
+  '繰越': '事業主借',
+  'その他': '旅費交通費',
+};
+
+const ACCOUNT_OPTIONS = [
+  '旅費交通費', '消耗品費', '雑費', '通信費', '接待交際費',
+  '会議費', '新聞図書費', '福利厚生費', '事業主借',
+];
+
+// Tax category mapping
+const TAX_MAP = {
+  '旅費交通費': '課対仕入10%',
+  '消耗品費': '課対仕入10%',
+  '雑費': '課対仕入10%',
+  '通信費': '課対仕入10%',
+  '接待交際費': '課対仕入10%',
+  '会議費': '課対仕入10%',
+  '新聞図書費': '課対仕入10%',
+  '福利厚生費': '課対仕入10%',
+  '事業主借': '対象外',
+};
+
+function classifyCategory(cells) {
+  for (const cell of cells) {
+    const t = cell.trim();
+    for (const [kw, cat] of Object.entries(CATEGORY_MAP)) {
+      if (t === kw || t.startsWith(kw)) return cat;
+    }
+  }
+  return 'その他';
+}
+
+function parseData() {
+  const raw = document.getElementById('pasteArea').value.trim();
+  const year = document.getElementById('yearSelect').value;
+  if (!raw) { showError('利用履歴データを貼り付けてください。'); return; }
+
+  const lines = raw.split('\n').filter(l => l.trim());
+  parsedRows = []; categories = {};
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (trimmed.includes('月日') && (trimmed.includes('種別') || trimmed.includes('残額'))) continue;
+
+    let cells = trimmed.split('\t');
+    if (cells.length < 3) cells = trimmed.split(/\s{2,}/);
+    cells = cells.map(c => c.trim()).filter(c => c && c !== '　');
+
+    let dateStr = null, dateIdx = -1;
+    for (let j = 0; j < cells.length; j++) {
+      const m = cells[j].match(/^(\d{1,2})\/(\d{1,2})$/);
+      if (m) { dateStr = m[0]; dateIdx = j; break; }
+    }
+    if (!dateStr || dateIdx < 0) continue;
+
+    const afterDate = cells.slice(dateIdx + 1);
+    const category = classifyCategory(afterDate);
+
+    const numericCells = [];
+    for (let j = afterDate.length - 1; j >= 0; j--) {
+      const cleaned = afterDate[j].replace(/[,，]/g, '').replace(/[＋\+]/g, '+').replace(/[ー－−\-]/g, '-');
+      const numMatch = cleaned.match(/^([+-]?\d+)$/);
+      if (numMatch) numericCells.unshift({ idx: j, value: parseInt(numMatch[1]) });
+    }
+
+    let amount = null;
+    if (numericCells.length >= 2) amount = numericCells[numericCells.length - 1].value;
+    else if (numericCells.length === 1) amount = numericCells[0].value;
+    else continue;
+
+    const descParts = [];
+    for (let j = 0; j < afterDate.length; j++) {
+      if (numericCells.some(n => n.idx === j)) continue;
+      const val = afterDate[j].trim();
+      if (val && val !== '　') descParts.push(val);
+    }
+    const description = descParts.join(' ').trim() || '不明';
+
+    const dp = dateStr.split('/');
+    const fullDate = `${year}/${dp[0].padStart(2,'0')}/${dp[1].padStart(2,'0')}`;
+
+    let outAmount = 0, inAmount = 0;
+    if (amount < 0) outAmount = Math.abs(amount);
+    else if (amount > 0) inAmount = amount;
+
+    parsedRows.push({ date: fullDate, category, description, outAmount, inAmount, rawAmount: amount });
+
+    if (!categories[category]) categories[category] = { count: 0, included: true, totalOut: 0, totalIn: 0 };
+    categories[category].count++;
+    categories[category].totalOut += outAmount;
+    categories[category].totalIn += inAmount;
+  }
+
+  if (parsedRows.length === 0) {
+    showError('有効なデータが見つかりませんでした。利用履歴テーブルをそのままコピー＆ペーストしてください。');
+    return;
+  }
+
+  parsedRows.sort((a, b) => a.date.localeCompare(b.date));
+  hideError();
+  renderFilterChips();
+  renderAccountMapping();
+  renderPreview();
+}
+
+function renderFilterChips() {
+  document.getElementById('filterChips').innerHTML = Object.entries(categories)
+    .sort((a, b) => b[1].count - a[1].count)
+    .map(([name, d]) => {
+      const cls = d.included ? 'active' : 'excluded';
+      const amt = d.totalOut > 0 ? `¥${d.totalOut.toLocaleString()}` : `+¥${d.totalIn.toLocaleString()}`;
+      return `<div class="chip ${cls}" onclick="toggleCat('${name}')">
+        <span class="chip-check">✓</span>${name}
+        <span class="chip-count">${d.count}件 / ${amt}</span>
+      </div>`;
+    }).join('');
+}
+
+function renderAccountMapping() {
+  const included = Object.entries(categories).filter(([,d]) => d.included);
+  document.getElementById('mappingGrid').innerHTML = included.map(([name]) => {
+    const def = DEFAULT_ACCOUNTS[name] || '旅費交通費';
+    const opts = ACCOUNT_OPTIONS.map(a => `<option value="${a}" ${a===def?'selected':''}>${a}</option>`).join('');
+    return `<div class="mapping-row">
+      <span class="mapping-cat">${name}</span>
+      <span class="mapping-arrow">→</span>
+      <select class="mapping-select" data-category="${name}">${opts}</select>
+    </div>`;
+  }).join('');
+}
+
+function getAccountForCategory(catName) {
+  const sel = document.querySelector(`.mapping-select[data-category="${catName}"]`);
+  return sel ? sel.value : (DEFAULT_ACCOUNTS[catName] || '旅費交通費');
+}
+
+function toggleCat(name) {
+  if (!categories[name]) return;
+  categories[name].included = !categories[name].included;
+  renderFilterChips();
+  renderAccountMapping();
+  renderPreview();
+}
+
+function setAllFilters(v) {
+  Object.keys(categories).forEach(k => categories[k].included = v);
+  renderFilterChips(); renderAccountMapping(); renderPreview();
+}
+
+function excludeDefaults() {
+  Object.keys(categories).forEach(k => { categories[k].included = !DEFAULT_EXCLUDE.includes(k); });
+  renderFilterChips(); renderAccountMapping(); renderPreview();
+}
+
+function getFiltered() {
+  return parsedRows.filter(r => categories[r.category]?.included);
+}
+
+function renderPreview() {
+  const filtered = getFiltered();
+  const excluded = parsedRows.length - filtered.length;
+
+  let totalOut = 0, totalIn = 0, cntOut = 0, cntIn = 0;
+  filtered.forEach(r => {
+    if (r.outAmount > 0) { totalOut += r.outAmount; cntOut++; }
+    if (r.inAmount > 0) { totalIn += r.inAmount; cntIn++; }
+  });
+
+  document.getElementById('stats').innerHTML = `
+    <div class="stat-card out">
+      <div class="stat-label">支出合計</div>
+      <div class="stat-value">¥${totalOut.toLocaleString()}</div>
+      <div class="stat-count">${cntOut}件</div>
+    </div>
+    <div class="stat-card in">
+      <div class="stat-label">入金（チャージ等）</div>
+      <div class="stat-value">¥${totalIn.toLocaleString()}</div>
+      <div class="stat-count">${cntIn}件</div>
+    </div>`;
+
+  const exEl = document.getElementById('statsExcluded');
+  if (excluded > 0) {
+    exEl.textContent = `${excluded}件を除外中（全${parsedRows.length}件中 ${filtered.length}件を出力）`;
+    exEl.style.display = 'block';
+  } else { exEl.style.display = 'none'; }
+
+  document.getElementById('downloadInfo').textContent = `${filtered.length}件の明細を出力します`;
+
+  document.getElementById('previewBody').innerHTML = parsedRows.map(r => {
+    const ex = !categories[r.category]?.included;
+    return `<tr class="${ex ? 'excluded-row' : ''}">
+      <td>${r.date}</td><td>${esc(r.category)}</td><td>${esc(r.description)}</td>
+      <td class="amount-out">${r.outAmount > 0 ? '¥'+r.outAmount.toLocaleString() : ''}</td>
+      <td class="amount-in">${r.inAmount > 0 ? '¥'+r.inAmount.toLocaleString() : ''}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('results').style.display = 'block';
+}
+
+function downloadExcel() {
+  const filtered = getFiltered();
+  if (!filtered.length) { showError('出力対象がありません。'); return; }
+
+  const paymentAccount = document.getElementById('paymentAccount').value;
+
+  // freee エクセルインポート形式のヘッダー
+  const headers = [
+    '収支区分', '管理番号', '発生日', '決済期日', '取引先', '取引先コード',
+    '勘定科目', '税区分', '金額', '税計算区分', '税額', '備考',
+    '品目', '部門', 'メモタグ（複数指定可、カンマ区切り）',
+    '決済日', '決済口座', '決済金額',
+    'セグメント1', 'セグメント2', 'セグメント3'
+  ];
+
+  const rows = [headers];
+
+  filtered.forEach(r => {
+    const account = getAccountForCategory(r.category);
+    const taxCat = TAX_MAP[account] || '課対仕入10%';
+    const amount = r.outAmount > 0 ? r.outAmount : r.inAmount;
+    const type = r.outAmount > 0 ? '支出' : '収入';
+
+    // 発生日をDate形式に
+    const dateParts = r.date.split('/');
+    const dateStr = `${dateParts[0]}-${dateParts[1]}-${dateParts[2]}`;
+
+    rows.push([
+      type,           // 収支区分
+      '',             // 管理番号（空欄＝自動採番）
+      dateStr,        // 発生日
+      '',             // 決済期日
+      '',             // 取引先
+      '',             // 取引先コード
+      account,        // 勘定科目
+      taxCat,         // 税区分
+      amount,         // 金額
+      '税込',         // 税計算区分
+      '',             // 税額（税込なので空欄＝自動計算）
+      'Suica ' + r.description,  // 備考
+      '',             // 品目
+      '',             // 部門
+      '',             // メモタグ
+      dateStr,        // 決済日
+      paymentAccount, // 決済口座
+      amount,         // 決済金額
+      '',             // セグメント1
+      '',             // セグメント2
+      '',             // セグメント3
+    ]);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+
+  // 列幅設定
+  ws['!cols'] = [
+    {wch:8}, {wch:8}, {wch:12}, {wch:12}, {wch:14}, {wch:14},
+    {wch:14}, {wch:16}, {wch:10}, {wch:10}, {wch:8}, {wch:30},
+    {wch:10}, {wch:10}, {wch:20},
+    {wch:12}, {wch:12}, {wch:10},
+    {wch:10}, {wch:10}, {wch:10},
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+
+  const year = document.getElementById('yearSelect').value;
+  const d = new Date();
+  const ts = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+  XLSX.writeFile(wb, `suica_freee_import_${year}_${ts}.xlsx`);
+
+  showSuccess('.btn-download', filtered.length);
+}
+
+function downloadCSV() {
+  const filtered = getFiltered();
+  if (!filtered.length) { showError('出力対象がありません。'); return; }
+
+  const BOM = '\uFEFF';
+  const csv = BOM + '日付,摘要,出金額,入金額\n' + filtered.map(r =>
+    `${r.date},"${r.description.replace(/"/g,'""')}",${r.outAmount||''},${r.inAmount||''}`
+  ).join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const y = document.getElementById('yearSelect').value;
+  const d = new Date();
+  const ts = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+
+  const a = document.createElement('a');
+  a.href = url; a.download = `suica_freee_meisai_${y}_${ts}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showSuccess('.btn-download-alt', filtered.length);
+}
+
+function showSuccess(btnSelector, count) {
+  const btn = document.querySelector(btnSelector);
+  const msg = document.createElement('div');
+  msg.className = 'msg msg-success';
+  msg.innerHTML = `✓ ダウンロード完了（${count}件）`;
+  const old = btn.closest('.dl-option').querySelector('.msg-success');
+  if (old) old.remove();
+  btn.parentNode.appendChild(msg);
+  setTimeout(() => msg.remove(), 4000);
+}
+
+function clearAll() {
+  document.getElementById('pasteArea').value = '';
+  document.getElementById('results').style.display = 'none';
+  parsedRows = []; categories = {}; hideError();
+}
+
+function showError(t) {
+  const el = document.getElementById('errorMsg');
+  el.className = 'msg msg-error'; el.textContent = t; el.style.display = 'block';
+}
+function hideError() { document.getElementById('errorMsg').style.display = 'none'; }
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+(function() {
+  const y = new Date().getFullYear();
+  document.getElementById('yearSelect').innerHTML = [y-1, y, y+1].map(v =>
+    `<option value="${v}" ${v===y?'selected':''}>${v}年</option>`
+  ).join('');
+})();
+</script>
+</body>
+</html>
